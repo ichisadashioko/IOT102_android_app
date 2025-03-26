@@ -1,0 +1,2 @@
+rootProject.name = "iot_graph"
+include ':app'
