@@ -1,7 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
+    <TextView
+        android:id="@+id/tv_device_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="sample" />
+
+    <Button
+        android:id="@+id/button_turn_on_fan"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="turn on fan" />
+
+    <Button
+        android:id="@+id/button_turn_off_fan"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="turn off fan" />
+
+    <EditText
+        android:id="@+id/edit_text_threshold_input"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <Button
+        android:id="@+id/button_set_threshold"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="set threshold" />
+
+    <Button
+        android:id="@+id/button_download_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="download data" />
 </LinearLayout>

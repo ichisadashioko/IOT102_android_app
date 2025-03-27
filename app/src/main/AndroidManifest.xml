@@ -3,6 +3,7 @@
     package="com.ichisadashioko.iot_graph">
 
     <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <application
         android:supportsRtl="true">
         <activity android:name=".MainActivity">
@@ -12,6 +13,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".DashboardActivity"></activity>
     </application>
 
 </manifest>
