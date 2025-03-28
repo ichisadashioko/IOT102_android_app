@@ -1,17 +1,22 @@
 package com.ichisadashioko.iot_graph;
 
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ToggleButton;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,13 +25,13 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.UUID;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class DashboardActivity extends Activity {
 
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothDevice bluetoothDevice;
-    public Button button_turn_on_fan;
-    public Button button_turn_off_fan;
+    public ToggleButton toggle_button_force_fan_on;
     public Button button_set_threshold;
     public Button button_download_data;
     public String deviceAddress;
@@ -38,6 +43,135 @@ public class DashboardActivity extends Activity {
     public OutputStream hc05_output_stream;
     public BluetoothSocket hc05_bluetooth_socket;
 
+    public void reconnect_bluetooth_device() {
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (deviceAddress != null) {
+            System.out.println("deviceAddress");
+            System.out.println(deviceAddress);
+            bluetoothDevice = bluetoothAdapter.getRemoteDevice(deviceAddress);
+
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    textView.setText("Connected to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
+                }
+            });
+
+            try {
+                hc05_bluetooth_socket = bluetoothDevice.createRfcommSocketToServiceRecord(HC05_UUID);
+                hc05_bluetooth_socket.connect();
+                hc05_input_stream = hc05_bluetooth_socket.getInputStream();
+                hc05_output_stream = hc05_bluetooth_socket.getOutputStream();
+
+                System.out.println("Connected to HC-05");
+            } catch (IOException e) {
+                e.printStackTrace();
+                Utils.toast(this, e.getMessage());
+            }
+        }
+    }
+
+    public ReentrantLock HC05_LOCK = new ReentrantLock();
+    public ReentrantLock TOGGLE_FORCE_FAN_BUTTON_LOCK = new ReentrantLock();
+
+    public void toggle_force_fan_on(boolean is_on) {
+        if (background_task_running) {
+            // TODO
+            return;
+        }
+
+        if (!UI_LOCK.tryLock()) {
+            return;
+        }
+
+        background_task_running = true;
+        UI_LOCK.unlock();
+
+        ProgressDialog progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage("working");
+        progressDialog.setCancelable(false); // Prevent user from dismissing
+        progressDialog.show();
+
+        Activity context = this;
+
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                try {
+
+                    if (!TOGGLE_FORCE_FAN_BUTTON_LOCK.tryLock()) {
+                        Utils.toast(context, "last toggle force fan on command is not finished!");
+                    } else {
+                        try {
+                            HC05_LOCK.lock();
+                            try {
+                                if (hc05_output_stream == null) {
+                                    reconnect_bluetooth_device();
+                                }
+                            } finally {
+                                HC05_LOCK.unlock();
+                            }
+
+                            if (hc05_output_stream == null) {
+                                Utils.toast(context, "hc05_output_stream is null");
+                            } else {
+                                try {
+                                    byte b_value;
+                                    if (is_on) {
+                                        b_value = Utils.BT_CMD_CODE_ENABLE_FAN;
+                                    } else {
+                                        b_value = Utils.BT_CMD_CODE_DISABLE_FAN;
+                                    }
+                                    hc05_output_stream.write(new byte[]{b_value});
+                                    hc05_output_stream.flush();
+                                    if (hc05_input_stream != null) {
+                                        int retval = hc05_input_stream.read();
+                                        String log_message = "HC05 retval after toggle force fan on: " + retval;
+                                        System.out.println(log_message);
+                                        if (retval == 0) {
+                                            if (is_on) {
+                                                toggle_button_force_fan_on.setBackgroundColor(Color.parseColor("#00ff00"));
+                                            } else {
+                                                toggle_button_force_fan_on.setBackgroundColor(Color.parseColor("#ff0000"));
+                                            }
+
+                                            Utils.toast(context, "toggle force fan on OK (" + b_value + ")");
+                                        } else {
+                                            Utils.toast(context, log_message);
+                                        }
+                                    } else {
+                                        Utils.toast(context, "hc05_input_stream == null");
+                                    }
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                    Utils.toast(context, e.getMessage());
+                                }
+                            }
+                        } finally {
+                            TOGGLE_FORCE_FAN_BUTTON_LOCK.unlock();
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println(ex.getMessage());
+                    System.err.println(ex.toString());
+                } finally {
+                    context.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            progressDialog.dismiss();
+                        }
+                    });
+                    background_task_running = false;
+                }
+
+            }
+        };
+        Thread t = new Thread(task);
+        t.start();
+    }
+
+    public ReentrantLock UI_LOCK = new ReentrantLock();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -47,15 +181,15 @@ public class DashboardActivity extends Activity {
         deviceAddress = intent.getStringExtra("DEVICE_ADDRESS");
         textView = findViewById(R.id.tv_device_info);
 
-        button_turn_off_fan = findViewById(R.id.button_turn_off_fan);
+        toggle_button_force_fan_on = findViewById(R.id.toggle_button_force_fan_on);
         button_download_data = findViewById(R.id.button_download_data);
         button_set_threshold = findViewById(R.id.button_set_threshold);
         threshold_input_text = findViewById(R.id.edit_text_threshold_input);
 
-        button_turn_off_fan.setOnClickListener(new View.OnClickListener() {
+        toggle_button_force_fan_on.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
-            public void onClick(View view) {
-                button_turn_off_fan_clicked();
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                toggle_force_fan_on(b);
             }
         });
 
@@ -73,92 +207,60 @@ public class DashboardActivity extends Activity {
             }
         });
 
-//        .setOnClickListener(new View.OnClickListener() {
-//            @Override
-//            public void onClick(View view) {
-//                button_turn_on_fan_clicked();
-//            }
-//        });
-
-        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (deviceAddress != null) {
-            System.out.println("deviceAddress");
-            System.out.println(deviceAddress);
-            bluetoothDevice = bluetoothAdapter.getRemoteDevice(deviceAddress);
-            textView.setText("Connected to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
-            try {
-                hc05_bluetooth_socket = bluetoothDevice.createRfcommSocketToServiceRecord(HC05_UUID);
-                hc05_bluetooth_socket.connect();
-                hc05_input_stream = hc05_bluetooth_socket.getInputStream();
-                hc05_output_stream = hc05_bluetooth_socket.getOutputStream();
-
-                System.out.println("Connected to HC-05");
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        button_turn_on_fan = findViewById(R.id.button_turn_on_fan);
-        button_turn_on_fan.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                button_turn_on_fan_clicked();
-            }
-        });
-    }
-
-    public void button_turn_on_fan_clicked() {
-        if (hc05_output_stream == null) {
-            Toast.makeText(this, "hc05_output_stream is null", Toast.LENGTH_SHORT).show();
-        } else {
-            try {
-                hc05_output_stream.write(new byte[]{Utils.BT_CMD_CODE_ENABLE_FAN});
-//                hc05_output_stream.write(Utils.BT_CMD_CODE_ENABLE_FAN);
-                hc05_output_stream.flush();
-                if (hc05_input_stream != null) {
-//                    int retval = hc05_input_stream.read();
-//                    System.out.println("HC05 retval after turning fan on");
-//                    System.out.println(retval);
-                }
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
+        HC05_LOCK.lock();
+        try {
+            reconnect_bluetooth_device();
+        } finally {
+            HC05_LOCK.unlock();
         }
     }
 
-
-    public void button_turn_off_fan_clicked() {
-        if (hc05_output_stream == null) {
-            Toast.makeText(this, "hc05_output_stream is null", Toast.LENGTH_SHORT).show();
-        } else {
-            try {
-                hc05_output_stream.write(new byte[]{Utils.BT_CMD_CODE_DISABLE_FAN});
-//                hc05_output_stream.write(Utils.BT_CMD_CODE_ENABLE_FAN);
-                hc05_output_stream.flush();
-                if (hc05_input_stream != null) {
-//                    int retval = hc05_input_stream.read();
-//                    System.out.println("HC05 retval after turning fan on");
-//                    System.out.println(retval);
-                }
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
-
+    public boolean background_task_running = false;
 
     public void button_download_data_clicked() {
-        if (hc05_output_stream == null) {
-            Toast.makeText(this, "hc05_output_stream is null", Toast.LENGTH_SHORT).show();
-        } else {
-            try {
-                hc05_output_stream.write(new byte[]{Utils.BT_CMD_CODE_DOWNLOAD_DATA});
-//                hc05_output_stream.write(Utils.BT_CMD_CODE_ENABLE_FAN);
-                hc05_output_stream.flush();
-                if (hc05_input_stream != null) {
+        if (background_task_running) {
+            // TODO
+            return;
+        }
+
+        if (!UI_LOCK.tryLock()) {
+            return;
+        }
+
+        background_task_running = true;
+        UI_LOCK.unlock();
+        ProgressDialog progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage("working");
+        progressDialog.setCancelable(false); // Prevent user from dismissing
+        progressDialog.show();
+
+        Activity context = this;
+
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
+
+                try {
+
+                    HC05_LOCK.lock();
+                    try {
+                        if (hc05_output_stream == null) {
+                            reconnect_bluetooth_device();
+                        }
+                    } finally {
+                        HC05_LOCK.unlock();
+                    }
+
+                    if (hc05_output_stream == null) {
+                        Utils.toast(context, "hc05_output_stream is null");
+                    } else {
+
+                        HC05_LOCK.lock();
+                        try {
+                            try {
+                                hc05_output_stream.write(new byte[]{Utils.BT_CMD_CODE_DOWNLOAD_DATA});
+                                hc05_output_stream.flush();
+                                if (hc05_input_stream != null) {
 //                    ArrayList<Integer> data_list = new ArrayList<>();
 //                    byte[] buffer = new byte[64];
 //                    while (true) {
@@ -188,59 +290,138 @@ public class DashboardActivity extends Activity {
 ////                    int retval = hc05_input_stream.read();
 ////                    System.out.println("HC05 retval after turning fan on");
 ////                    System.out.println(retval);
+                                }
+
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                Utils.toast(context, e.getMessage());
+                            }
+                        } finally {
+                            HC05_LOCK.unlock();
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println(ex.getMessage());
+                    System.err.println(ex.toString());
+                } finally {
+                    context.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            progressDialog.dismiss();
+                        }
+                    });
+                    background_task_running = false;
                 }
 
-            } catch (Exception e) {
-                e.printStackTrace();
-                Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
             }
-        }
+        };
+        Thread t = new Thread(task);
+        t.start();
+
     }
 
     public void button_set_threshold_clicked() {
-        if (hc05_output_stream == null) {
-            Toast.makeText(this, "hc05_output_stream is null", Toast.LENGTH_SHORT).show();
-        } else {
-            try {
-                String input_str = threshold_input_text.getText().toString();
+        if (background_task_running) {
+            // TODO
+            return;
+        }
+
+        if (!UI_LOCK.tryLock()) {
+            return;
+        }
+
+        background_task_running = true;
+        UI_LOCK.unlock();
+
+        ProgressDialog progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage("working");
+        progressDialog.setCancelable(false); // Prevent user from dismissing
+        progressDialog.show();
+
+        Activity context = this;
+
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
                 try {
-                    float input_value = Float.parseFloat(input_str);
-                    // Allocate a ByteBuffer with 4 bytes
-                    ByteBuffer buffer = ByteBuffer.allocate(4);
-
-                    // Set byte order to LITTLE_ENDIAN
-                    buffer.order(ByteOrder.LITTLE_ENDIAN);
-
-                    // Put float value into the buffer
-                    buffer.putFloat(input_value);
-
-                    // Get the byte array
-                    byte[] littleEndianBytes = buffer.array();
-                    for (int i = 0; i < littleEndianBytes.length; i++) {
-                        System.out.println(littleEndianBytes[i]);
+                    HC05_LOCK.lock();
+                    try {
+                        if (hc05_output_stream == null) {
+                            reconnect_bluetooth_device();
+                        }
+                    } finally {
+                        HC05_LOCK.unlock();
                     }
+                    if (hc05_output_stream == null) {
+                        Utils.toast(context, "hc05_output_stream is null");
+                    } else {
+                        HC05_LOCK.lock();
+                        try {
+                            String input_str = threshold_input_text.getText().toString();
+                            try {
+                                float input_value = Float.parseFloat(input_str);
+                                // Allocate a ByteBuffer with 4 bytes
+                                ByteBuffer buffer = ByteBuffer.allocate(4);
 
-                    hc05_output_stream.write(new byte[]{Utils.BT_CMD_CODE_SET_THRESHOLD});
-                    hc05_output_stream.write(littleEndianBytes);
+                                // Set byte order to LITTLE_ENDIAN
+                                buffer.order(ByteOrder.LITTLE_ENDIAN);
 
-//                hc05_output_stream.write(Utils.BT_CMD_CODE_ENABLE_FAN);
-                    hc05_output_stream.flush();
-                    if (hc05_input_stream != null) {
-//                    int retval = hc05_input_stream.read();
-//                    System.out.println("HC05 retval after turning fan on");
-//                    System.out.println(retval);
+                                // Put float value into the buffer
+                                buffer.putFloat(input_value);
+
+                                // Get the byte array
+                                byte[] littleEndianBytes = buffer.array();
+                                for (int i = 0; i < littleEndianBytes.length; i++) {
+                                    System.out.println(littleEndianBytes[i]);
+                                }
+
+                                hc05_output_stream.write(new byte[]{Utils.BT_CMD_CODE_SET_THRESHOLD});
+                                hc05_output_stream.write(littleEndianBytes);
+
+                                hc05_output_stream.flush();
+                                if (hc05_input_stream != null) {
+                                    int retval = hc05_input_stream.read();
+                                    String log_message = "HC05 retval after BT_CMD_CODE_SET_THRESHOLD: " + retval;
+                                    System.out.println(log_message);
+                                    if (retval == 0) {
+                                        Utils.toast(context, "BT_CMD_CODE_SET_THRESHOLD OK");
+                                    } else {
+                                        Utils.toast(context, log_message);
+                                    }
+                                } else {
+                                    Utils.toast(context, "hc05_input_stream == null");
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                Utils.toast(context, e.getMessage());
+                            }
+
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            Utils.toast(context, e.getMessage());
+                        } finally {
+                            HC05_LOCK.unlock();
+                        }
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
-                    return;
+                } catch (Exception ex) {
+                    System.err.println(ex.getMessage());
+                    System.err.println(ex.toString());
+                } finally {
+                    context.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            progressDialog.dismiss();
+                        }
+                    });
+                    background_task_running = false;
                 }
 
-            } catch (Exception e) {
-                e.printStackTrace();
-                Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
             }
-        }
+        };
+        Thread t = new Thread(task);
+        t.start();
+        //
+
     }
 }
 
