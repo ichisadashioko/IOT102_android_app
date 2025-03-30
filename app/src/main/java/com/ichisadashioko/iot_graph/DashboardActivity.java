@@ -129,14 +129,14 @@ public class DashboardActivity extends Activity {
         progressDialog.setCancelable(false); // Prevent user from dismissing
         progressDialog.show();
 
-        Activity context = this;
+        Activity that = this;
 
         Runnable task = new Runnable() {
             @Override
             public void run() {
                 try {
                     if (!TOGGLE_FORCE_FAN_BUTTON_LOCK.tryLock()) {
-                        Utils.toast(context, "last toggle force fan on command is not finished!");
+                        Utils.toast(that, "last toggle force fan on command is not finished!");
                     } else {
                         try {
                             HC05_LOCK.lock();
@@ -149,7 +149,7 @@ public class DashboardActivity extends Activity {
                             }
 
                             if (hc05_output_stream == null) {
-                                Utils.toast(context, "hc05_output_stream is null");
+                                Utils.toast(that, "hc05_output_stream is null");
                             } else {
                                 try {
                                     byte b_value;
@@ -162,8 +162,66 @@ public class DashboardActivity extends Activity {
 //                                    boolean is_connection_alive = hc05_output_stream.
                                     hc05_output_stream.write(new byte[]{b_value});
                                     hc05_output_stream.flush();
-                                    if (hc05_input_stream != null) {
-                                        int retval = hc05_input_stream.read();
+
+                                    int timeout_ms = bluetooth_timeout_secs * 1000;
+                                    int check_interval_ms = 100;
+                                    int wait_loop_count = timeout_ms / check_interval_ms;
+
+                                    final boolean[] new_data_ok = {false};
+                                    final byte[] read_buffer = new byte[32];
+                                    final Exception[] read_thread_ex = {null};
+                                    final int[] loop_read_count = {0};
+
+                                    Thread read_thread = new Thread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            try {
+                                                loop_read_count[0] = hc05_input_stream.read(read_buffer);
+                                                synchronized (new_data_ok) {
+                                                    new_data_ok[0] = true;
+                                                }
+                                            } catch (Exception e) {
+                                                e.printStackTrace();
+                                                read_thread_ex[0] = e;
+                                            }
+                                        }
+                                    });
+
+                                    read_thread.start();
+
+                                    for (int wait_loop_idx = 0; wait_loop_idx < wait_loop_count; wait_loop_idx++) {
+                                        try {
+                                            Thread.sleep(check_interval_ms);
+                                            synchronized (new_data_ok) {
+                                                if (new_data_ok[0]) {
+                                                    break;
+                                                }
+                                            }
+                                        } catch (InterruptedException interruptedException) {
+                                            break;
+                                        }
+                                    }
+
+                                    boolean is_ok = true;
+                                    if (read_thread_ex[0] != null) {
+                                        is_ok = false;
+                                        read_thread_ex[0].printStackTrace(System.err);
+                                        Utils.toast(that, read_thread_ex[0].getMessage());
+                                    }
+
+                                    if (!new_data_ok[0]) {
+                                        // TODO connection timeout
+                                        is_ok = false;
+                                        Utils.toast(that, "connection timeout");
+                                    }
+
+                                    if (loop_read_count[0] < 1) {
+                                        is_ok = false;
+                                        Utils.toast(that, "no response data");
+                                    }
+
+                                    if (is_ok) {
+                                        int retval = read_buffer[0];
                                         String log_message = "HC05 retval after toggle force fan on: " + retval;
                                         System.out.println(log_message);
                                         if (retval == 0) {
@@ -173,16 +231,14 @@ public class DashboardActivity extends Activity {
                                                 toggle_button_force_fan_on.setBackgroundColor(Color.parseColor("#ff0000"));
                                             }
 
-                                            Utils.toast(context, "toggle force fan on OK (" + b_value + ")");
+                                            Utils.toast(that, "toggle force fan on OK (" + b_value + ")");
                                         } else {
-                                            Utils.toast(context, log_message);
+                                            Utils.toast(that, log_message);
                                         }
-                                    } else {
-                                        Utils.toast(context, "hc05_input_stream == null");
                                     }
                                 } catch (Exception e) {
                                     e.printStackTrace();
-                                    Utils.toast(context, e.getMessage());
+                                    Utils.toast(that, e.getMessage());
                                 }
                             }
                         } finally {
@@ -193,7 +249,7 @@ public class DashboardActivity extends Activity {
                     System.err.println(ex.getMessage());
                     System.err.println(ex.toString());
                 } finally {
-                    context.runOnUiThread(new Runnable() {
+                    that.runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
                             progressDialog.dismiss();
@@ -373,9 +429,22 @@ public class DashboardActivity extends Activity {
 
                                         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
                                         int total_read_count = 0;
+                                        long last_ui_log_time_ms = System.currentTimeMillis();
+                                        long ui_log_interval_ms = 1000;
                                         while (true) {
                                             if (total_read_count >= file_size) {
                                                 break;
+                                            }
+
+                                            if ((System.currentTimeMillis() - last_ui_log_time_ms) > ui_log_interval_ms) {
+                                                last_ui_log_time_ms = System.currentTimeMillis();
+                                                String ui_log_message = total_read_count + "/" + file_size;
+                                                that.runOnUiThread(new Runnable() {
+                                                    @Override
+                                                    public void run() {
+                                                        progressDialog.setMessage(ui_log_message);
+                                                    }
+                                                });
                                             }
 
                                             final boolean[] new_data_ok = {false};
