@@ -18,6 +18,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ToggleButton;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -42,6 +43,7 @@ public class DashboardActivity extends Activity {
     public InputStream hc05_input_stream;
     public OutputStream hc05_output_stream;
     public BluetoothSocket hc05_bluetooth_socket;
+    public int bluetooth_timeout_secs = 5;
 
     public void reconnect_bluetooth_device() {
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -53,20 +55,55 @@ public class DashboardActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    textView.setText("Connected to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
+                    textView.setText("Connecting to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
                 }
             });
 
             try {
                 hc05_bluetooth_socket = bluetoothDevice.createRfcommSocketToServiceRecord(HC05_UUID);
-                hc05_bluetooth_socket.connect();
-                hc05_input_stream = hc05_bluetooth_socket.getInputStream();
-                hc05_output_stream = hc05_bluetooth_socket.getOutputStream();
+                Thread t = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            hc05_bluetooth_socket.connect();
+                        } catch (Exception ex) {
 
-                System.out.println("Connected to HC-05");
-            } catch (IOException e) {
+                        }
+                    }
+                });
+                t.start();
+                Thread.sleep(bluetooth_timeout_secs * 1000);
+//                hc05_bluetooth_socket.connect();
+                if (!hc05_bluetooth_socket.isConnected()) {
+                    hc05_bluetooth_socket.close();
+                    Utils.toast(this, "Failed to connect to HC-05 after timeout");
+                    hc05_bluetooth_socket = null;
+                    hc05_input_stream = null;
+                    hc05_output_stream = null;
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            textView.setText("Failed to connect to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
+                        }
+                    });
+                } else {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            textView.setText("Connected to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
+                        }
+                    });
+                    hc05_input_stream = hc05_bluetooth_socket.getInputStream();
+                    hc05_output_stream = hc05_bluetooth_socket.getOutputStream();
+
+                    System.out.println("Connected to HC-05");
+                }
+            } catch (Exception e) {
                 e.printStackTrace();
                 Utils.toast(this, e.getMessage());
+                hc05_bluetooth_socket = null;
+                hc05_input_stream = null;
+                hc05_output_stream = null;
             }
         }
     }
@@ -98,7 +135,6 @@ public class DashboardActivity extends Activity {
             @Override
             public void run() {
                 try {
-
                     if (!TOGGLE_FORCE_FAN_BUTTON_LOCK.tryLock()) {
                         Utils.toast(context, "last toggle force fan on command is not finished!");
                     } else {
@@ -122,6 +158,8 @@ public class DashboardActivity extends Activity {
                                     } else {
                                         b_value = Utils.BT_CMD_CODE_DISABLE_FAN;
                                     }
+
+//                                    boolean is_connection_alive = hc05_output_stream.
                                     hc05_output_stream.write(new byte[]{b_value});
                                     hc05_output_stream.flush();
                                     if (hc05_input_stream != null) {
@@ -207,12 +245,47 @@ public class DashboardActivity extends Activity {
             }
         });
 
-        HC05_LOCK.lock();
-        try {
-            reconnect_bluetooth_device();
-        } finally {
-            HC05_LOCK.unlock();
-        }
+        Activity that = this;
+
+        UI_LOCK.lock();
+        background_task_running = true;
+        UI_LOCK.unlock();
+
+        ProgressDialog progressDialog = new ProgressDialog(that);
+        progressDialog.setMessage("working");
+        progressDialog.setCancelable(false); // Prevent user from dismissing
+        progressDialog.show();
+
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    HC05_LOCK.lock();
+                    try {
+                        reconnect_bluetooth_device();
+                    } catch (Exception ex) {
+                        System.err.println(ex.getMessage());
+                        System.err.println(ex.toString());
+                        Utils.toast(that, ex.toString());
+                    } finally {
+                        HC05_LOCK.unlock();
+                    }
+                } catch (Exception ex) {
+                    System.err.println(ex.getMessage());
+                    System.err.println(ex.toString());
+                    Utils.toast(that, ex.toString());
+                } finally {
+                    background_task_running = false;
+                    that.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            progressDialog.dismiss();
+                        }
+                    });
+                }
+            }
+        });
+        t.start();
     }
 
     public boolean background_task_running = false;
@@ -234,14 +307,12 @@ public class DashboardActivity extends Activity {
         progressDialog.setCancelable(false); // Prevent user from dismissing
         progressDialog.show();
 
-        Activity context = this;
+        Activity that = this;
 
         Runnable task = new Runnable() {
             @Override
             public void run() {
-
                 try {
-
                     HC05_LOCK.lock();
                     try {
                         if (hc05_output_stream == null) {
@@ -252,7 +323,7 @@ public class DashboardActivity extends Activity {
                     }
 
                     if (hc05_output_stream == null) {
-                        Utils.toast(context, "hc05_output_stream is null");
+                        Utils.toast(that, "hc05_output_stream is null");
                     } else {
 
                         HC05_LOCK.lock();
@@ -260,6 +331,153 @@ public class DashboardActivity extends Activity {
                             try {
                                 hc05_output_stream.write(new byte[]{Utils.BT_CMD_CODE_DOWNLOAD_DATA});
                                 hc05_output_stream.flush();
+                                int status_code = hc05_input_stream.read();
+                                if ((status_code < 0) || (status_code > 255)) {
+                                    String log_message = "BT_CMD_CODE_DOWNLOAD_DATA failed - broken pipe? - status_code: " + status_code;
+                                    System.err.println(log_message);
+                                    Utils.toast(that, log_message);
+                                } else if (status_code != 0) {
+                                    String log_message = "BT_CMD_CODE_DOWNLOAD_DATA failed - status_code: " + status_code;
+                                    System.err.println(log_message);
+                                    Utils.toast(that, log_message);
+                                } else {
+                                    // 4 bytes to indicate file size
+                                    ArrayList<Byte> file_size_bytes_list = new ArrayList<>();
+                                    boolean file_size_ok = true;
+                                    while (file_size_bytes_list.size() < 4) {
+                                        int _value = hc05_input_stream.read();
+                                        if ((_value < 0) || (_value > 255)) {
+                                            String log_message = "BT_CMD_CODE_DOWNLOAD_DATA|FILE_SIZE failed - broken pipe? - status_code: " + status_code;
+                                            System.err.println(log_message);
+                                            Utils.toast(that, log_message);
+                                            file_size_ok = false;
+                                            break;
+                                        } else {
+                                            file_size_bytes_list.add((byte) _value);
+                                        }
+                                    }
+
+                                    if (!file_size_ok) {
+                                        String log_message = "failed to get data size";
+                                        System.err.println(log_message);
+                                        Utils.toast(that, log_message);
+                                    } else {
+                                        long file_size = ((file_size_bytes_list.get(0) & 0xFFL)) |
+                                                ((file_size_bytes_list.get(1) & 0xFFL) << 8) |
+                                                ((file_size_bytes_list.get(2) & 0xFFL) << 16) |
+                                                ((file_size_bytes_list.get(3) & 0xFFL) << 24);
+
+                                        String log_message = "FILE_SIZE: " + file_size;
+                                        System.out.println(log_message);
+                                        Utils.toast(that, log_message);
+
+                                        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                                        int total_read_count = 0;
+                                        while (true) {
+                                            if (total_read_count >= file_size) {
+                                                break;
+                                            }
+
+                                            final boolean[] new_data_ok = {false};
+                                            final byte[] read_buffer = new byte[32];
+                                            final Exception[] read_thread_ex = {null};
+                                            final int[] loop_read_count = {0};
+
+                                            Thread read_thread = new Thread(new Runnable() {
+                                                @Override
+                                                public void run() {
+                                                    try {
+                                                        loop_read_count[0] = hc05_input_stream.read(read_buffer);
+                                                        synchronized (new_data_ok) {
+                                                            new_data_ok[0] = true;
+                                                        }
+                                                    } catch (Exception e) {
+                                                        e.printStackTrace();
+                                                        read_thread_ex[0] = e;
+                                                    }
+                                                }
+                                            });
+                                            read_thread.start();
+
+                                            int timeout_ms = bluetooth_timeout_secs * 1000;
+                                            int check_interval_ms = 100;
+                                            int wait_loop_count = timeout_ms / check_interval_ms;
+
+                                            for (int wait_loop_idx = 0; wait_loop_idx < wait_loop_count; wait_loop_idx++) {
+                                                try {
+                                                    Thread.sleep(check_interval_ms);
+                                                    synchronized (new_data_ok) {
+                                                        if (new_data_ok[0]) {
+                                                            break;
+                                                        }
+                                                    }
+                                                } catch (InterruptedException interruptedException) {
+                                                    break;
+                                                }
+                                            }
+
+                                            if (read_thread_ex[0] != null) {
+                                                // TODO
+                                                break;
+                                            }
+
+                                            if (!new_data_ok[0]) {
+                                                // TODO connection timeout
+                                                break;
+                                            }
+
+                                            if (loop_read_count[0] < 1) {
+                                                break;
+                                            }
+
+                                            total_read_count += loop_read_count[0];
+                                            buffer.write(read_buffer, 0, loop_read_count[0]);
+                                        }
+
+                                        log_message = "total_read_count: " + total_read_count;
+                                        System.out.println(log_message);
+                                        Utils.toast(that, log_message);
+
+                                        if (total_read_count < 1) {
+                                            log_message = "empty data";
+
+                                            System.out.println(log_message);
+                                            Utils.toast(that, log_message);
+                                        } else {
+                                            byte[] file_content_bs = buffer.toByteArray();
+                                            ArrayList<LogDataPoint> data_point_list = new ArrayList<>();
+                                            ByteArrayOutputStream current_line_buffer = new ByteArrayOutputStream();
+                                            for (int i = 0; i < file_content_bs.length; i++) {
+                                                byte _c = file_content_bs[i];
+                                                if (_c == 10) {
+                                                    byte[] current_line_bs = current_line_buffer.toByteArray();
+                                                    // validate line content
+                                                    LogDataPoint data_point = Utils.parse_data_line_bs(current_line_bs);
+                                                    if (data_point != null) {
+                                                        data_point_list.add(data_point);
+                                                    }
+                                                    current_line_buffer = new ByteArrayOutputStream();
+                                                } else {
+                                                    current_line_buffer.write(_c);
+                                                }
+                                            }
+
+                                            byte[] current_line_bs = current_line_buffer.toByteArray();
+                                            // validate line content
+                                            LogDataPoint data_point = Utils.parse_data_line_bs(current_line_bs);
+                                            if (data_point != null) {
+                                                data_point_list.add(data_point);
+                                            }
+
+                                            log_message = "data_point_list.size: " + data_point_list.size();
+
+                                            System.out.println(log_message);
+                                            Utils.toast(that, log_message);
+
+                                        }
+                                    }
+
+                                }
                                 if (hc05_input_stream != null) {
 //                    ArrayList<Integer> data_list = new ArrayList<>();
 //                    byte[] buffer = new byte[64];
@@ -294,7 +512,7 @@ public class DashboardActivity extends Activity {
 
                             } catch (Exception e) {
                                 e.printStackTrace();
-                                Utils.toast(context, e.getMessage());
+                                Utils.toast(that, e.getMessage());
                             }
                         } finally {
                             HC05_LOCK.unlock();
@@ -304,7 +522,7 @@ public class DashboardActivity extends Activity {
                     System.err.println(ex.getMessage());
                     System.err.println(ex.toString());
                 } finally {
-                    context.runOnUiThread(new Runnable() {
+                    that.runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
                             progressDialog.dismiss();
