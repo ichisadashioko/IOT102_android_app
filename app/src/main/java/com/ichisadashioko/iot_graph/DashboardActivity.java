@@ -213,6 +213,8 @@ public class DashboardActivity extends Activity {
                                         // TODO connection timeout
                                         is_ok = false;
                                         Utils.toast(that, "connection timeout");
+                                        hc05_input_stream = null;
+                                        hc05_output_stream = null;
                                     }
 
                                     if (loop_read_count[0] < 1) {

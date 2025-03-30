@@ -112,6 +112,15 @@ public class Utils {
                 continue;
             }
 
+            if (_c == 13) {
+                // dot character for float
+                continue;
+            }
+            if (_c == 10) {
+                // dot character for float
+                continue;
+            }
+
             return null;
         }
 
@@ -121,6 +130,8 @@ public class Utils {
 
         try {
             String line = new String(line_bs, "ASCII");
+            line = line.replace("\r", "");
+            line = line.replace("\n", "");
             int tab_index = line.indexOf(9);
             String unix_ts_str = line.substring(0, tab_index);
             String temperature_value_str = line.substring(tab_index);
