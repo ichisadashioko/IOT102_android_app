@@ -63,8 +63,8 @@ public class LineChartActivity extends Activity {
                     @Override
                     public void run() {
 //                        setupChart();
-//                        plotTemperatureData(line_chart, Utils.LAST_PARSED_DATA);
                         line_chart.setPinchZoom(true);
+//                        plotTemperatureData(line_chart, Utils.LAST_PARSED_DATA);
 //                        render_line_chart();
                         stackoverflow_draw_line_chart();
                     }
