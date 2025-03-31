@@ -54,7 +54,7 @@ public class LineChartActivity extends Activity {
                 Random rand = new Random();
                 for (int i = 0; i < 100; i++) {
                     LogDataPoint item = new LogDataPoint();
-                    item.unix_ts = unixTime + 1;
+                    item.unix_ts = unixTime + i;
                     item.temperature = min_range + rand.nextFloat() * (max_range - min_range);
                     Utils.LAST_PARSED_DATA.add(item);
                 }
@@ -133,11 +133,14 @@ public class LineChartActivity extends Activity {
 //    }
     private void stackoverflow_draw_line_chart() {
         ArrayList<Entry> lineEntries = new ArrayList<Entry>();
+        int min_time = Utils.LAST_PARSED_DATA.get(0).unix_ts;
+        int max_time = Utils.LAST_PARSED_DATA.get(Utils.LAST_PARSED_DATA.size() - 1).unix_ts;
 
         for (int i = 0; i < Utils.LAST_PARSED_DATA.size(); i++) {
             LogDataPoint d = Utils.LAST_PARSED_DATA.get(i);
 //            lineEntries.add(new Entry(d.unix_ts, d.temperature));
-            lineEntries.add(new Entry(i, d.temperature));
+            lineEntries.add(new Entry(d.unix_ts - min_time, d.temperature));
+//            lineEntries.add(new Entry(i, d.temperature));
             System.out.println(d.unix_ts);
             System.out.println(d.temperature);
         }
@@ -165,7 +168,18 @@ public class LineChartActivity extends Activity {
         line_chart.setData(lineData);
 
         // Setup X Axis
-//        XAxis xAxis = line_chart.getXAxis();
+        XAxis xAxis = line_chart.getXAxis();
+//        xAxis.setAxisMinimum(min_time);
+//        xAxis.setAxisMaximum(max_time);
+        int x_axis_min = min_time - min_time;
+        int x_axis_max = max_time - min_time;
+        xAxis.setAxisMinimum(x_axis_min);
+        xAxis.setAxisMaximum(max_time - min_time);
+        System.out.println("min_time: " + min_time);
+        System.out.println("max_time: " + max_time);
+        System.out.println("x_axis_min: " + x_axis_min);
+        System.out.println("x_axis_max: " + x_axis_max);
+
 //        xAxis.setPosition(XAxis.XAxisPosition.TOP);
 //        xAxis.setGranularityEnabled(true);
 //        xAxis.setGranularity(1.0f);
