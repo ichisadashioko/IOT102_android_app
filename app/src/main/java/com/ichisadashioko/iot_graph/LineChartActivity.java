@@ -3,6 +3,7 @@ package com.ichisadashioko.iot_graph;
 import android.app.Activity;
 
 
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.DashPathEffect;
 import android.os.Bundle;
@@ -18,6 +19,8 @@ import com.github.mikephil.charting.formatter.IFillFormatter;
 import com.github.mikephil.charting.formatter.ValueFormatter;
 import com.github.mikephil.charting.interfaces.dataprovider.LineDataProvider;
 import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
+import com.github.mikephil.charting.renderer.XAxisRenderer;
+import com.github.mikephil.charting.utils.MPPointF;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -66,7 +69,8 @@ public class LineChartActivity extends Activity {
                         line_chart.setPinchZoom(true);
 //                        plotTemperatureData(line_chart, Utils.LAST_PARSED_DATA);
 //                        render_line_chart();
-                        stackoverflow_draw_line_chart();
+//                        stackoverflow_draw_line_chart();
+                        stackoverflow_draw_line_chart_proper_time_x_axis();
                     }
                 });
             }
@@ -198,77 +202,156 @@ public class LineChartActivity extends Activity {
         line_chart.invalidate();
     }
 
-    public void render_line_chart() {
-        ArrayList<Entry> values = new ArrayList<Entry>();
+    private void stackoverflow_draw_line_chart_proper_time_x_axis() {
+        ArrayList<Entry> lineEntries = new ArrayList<Entry>();
+        int min_time = Utils.LAST_PARSED_DATA.get(0).unix_ts;
+        int max_time = Utils.LAST_PARSED_DATA.get(Utils.LAST_PARSED_DATA.size() - 1).unix_ts;
 
         for (int i = 0; i < Utils.LAST_PARSED_DATA.size(); i++) {
             LogDataPoint d = Utils.LAST_PARSED_DATA.get(i);
-            values.add(new Entry(d.unix_ts, d.temperature));
+//            lineEntries.add(new Entry(d.unix_ts, d.temperature));
+            lineEntries.add(new Entry(d.unix_ts - min_time, d.temperature));
+//            lineEntries.add(new Entry(i, d.temperature));
             System.out.println(d.unix_ts);
             System.out.println(d.temperature);
         }
 
-        LineDataSet set1;
+        LineDataSet lineDataSet = new LineDataSet(lineEntries, "temperature");
 
-        if (line_chart.getData() != null && line_chart.getData().getDataSetCount() > 0) {
-            set1 = (LineDataSet) line_chart.getData().getDataSetByIndex(0);
-            set1.setValues(values);
-            set1.notifyDataSetChanged();
-            line_chart.getData().notifyDataChanged();
-            line_chart.notifyDataSetChanged();
-        } else {
-            set1 = new LineDataSet(values, "DataSet 1");
-            set1.setDrawIcons(false);
+        LineData lineData = new LineData(lineDataSet);
+        line_chart.setData(lineData);
 
-            // draw dashed line
-            set1.enableDashedLine(10f, 5f, 0f);
+        XAxis xAxis = line_chart.getXAxis();
+//        xAxis.setAxisMinimum(min_time);
+//        xAxis.setAxisMaximum(max_time);
+        int x_axis_min = min_time - min_time;
+        int x_axis_max = max_time - min_time;
+        xAxis.setAxisMinimum(x_axis_min);
+        xAxis.setAxisMaximum(max_time - min_time);
+        System.out.println("min_time: " + min_time);
+        System.out.println("max_time: " + max_time);
+        System.out.println("x_axis_min: " + x_axis_min);
+        System.out.println("x_axis_max: " + x_axis_max);
+//        xAxis.setGranularity(5f);
+//        xAxis.setGranularity(30f);
+//        xAxis.setGranularity(60f);
+        xAxis.setValueFormatter(new ValueFormatter() { // Convert back to real timestamps for display
+            @Override
+            public String getFormattedValue(float value) {
+                float x = value + min_time;
+                x *= 1000;
+                Date date_obj = new Date((long) x);
+                String retval = new SimpleDateFormat("yyyy:MM:dd\nHH:mm:ss", Locale.getDefault()).format(date_obj);
+                System.out.println(value);
+                System.out.println(retval);
+                return retval;
+//                return new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(date_obj);
+//                return String.format("%02d:%02d:%02d", date_obj.getHours(), date_obj.getMinutes(), date_obj.getSeconds());
+//                return String.format("%04d-%02d-%02d\n%02d:%02d:%02d",date_obj.getYear(), date_obj.getMonth(), date_obj.getDay(), date_obj.getHours(), date_obj.getMinutes(), date_obj.getSeconds());
+//                return String.format("%04d-%02d-%02d %02d:%02d:%02d",date_obj.getYear(), date_obj.getMonth(), date_obj.getDay(), date_obj.getHours(), date_obj.getMinutes(), date_obj.getSeconds());
+            }
+        });
 
-            // black lines and points
-            set1.setColor(Color.BLACK);
-            set1.setCircleColor(Color.BLACK);
+        line_chart.setXAxisRenderer(new XAxisRenderer(line_chart.getViewPortHandler(), line_chart.getXAxis(), line_chart.getTransformer(YAxis.AxisDependency.LEFT)) {
+            @Override
+            protected void drawLabel(Canvas c, String formattedLabel, float x, float y, MPPointF anchor, float angleDegrees) {
+                String line[] = formattedLabel.split("\n");
+                com.github.mikephil.charting.utils.Utils.drawXAxisValue(c, line[0], x, y, mAxisLabelPaint, anchor, angleDegrees);
+//                com.github.mikephil.charting.utils.Utils.drawXAxisValue(c, line[1], x + mAxisLabelPaint.getTextSize(), y + mAxisLabelPaint.getTextSize(), mAxisLabelPaint, anchor, angleDegrees);
+                com.github.mikephil.charting.utils.Utils.drawXAxisValue(c, line[1], x, y + mAxisLabelPaint.getTextSize(), mAxisLabelPaint, anchor, angleDegrees);
+//                super.drawLabel(c, formattedLabel, x, y, anchor, angleDegrees);
+            }
+        });
+//        xAxis.setGranularity(10f);
+        xAxis.setGranularity(1f);
+        xAxis.setLabelCount(5, true);
+        xAxis.setGranularityEnabled(true);
+        xAxis.setYOffset(20f);
+        line_chart.setExtraLeftOffset(10);
+        line_chart.setExtraRightOffset(10);
+        line_chart.setExtraTopOffset(20);
+//        xAxis.setLabelRotationAngle(-30f);
+        lineDataSet.setAxisDependency(YAxis.AxisDependency.LEFT);
 
-            // line thickness and point size
-            set1.setLineWidth(1f);
-            ;
-            set1.setCircleRadius(3f);
+        YAxis yAxis = line_chart.getAxisLeft();
+        yAxis.setAxisMinimum(10);
+        yAxis.setAxisMaximum(50);
+        yAxis.setGranularity(0.1f);
 
-            // draw points as solid circles
-            set1.setDrawCircleHole(false);
 
-            // customize legend entry
-//            set1.setFormLineWidth(1f);
-//            set1.setFormLineDashEffect(new DashPathEffect(new float[]{10f, 5f}, 0f));
-//            set1.setFormSize(15.f);
-
-            // text size of values
-            set1.setValueTextSize(9f);
-
-            // draw selection line as dashed
-            set1.enableDashedHighlightLine(10f, 5f, 0f);
-
-            // set the filled area
-            set1.setDrawFilled(true);
-            set1.setFillFormatter(new IFillFormatter() {
-                @Override
-                public float getFillLinePosition(ILineDataSet dataSet, LineDataProvider dataProvider) {
-                    return line_chart.getAxisLeft().getAxisMinimum();
-                }
-            });
-
-            // set color of filled area
-            set1.setFillColor(Color.BLACK);
-
-            ArrayList<ILineDataSet> dataSets = new ArrayList<>();
-            dataSets.add(set1); // add the data sets
-
-            // create a data object with the data sets
-            LineData data = new LineData(dataSets);
-
-            // set data
-            line_chart.setData(data);
-        }
-
+        line_chart.invalidate();
     }
+
+//    public void render_line_chart() {
+//        ArrayList<Entry> values = new ArrayList<Entry>();
+//
+//        for (int i = 0; i < Utils.LAST_PARSED_DATA.size(); i++) {
+//            LogDataPoint d = Utils.LAST_PARSED_DATA.get(i);
+//            values.add(new Entry(d.unix_ts, d.temperature));
+//            System.out.println(d.unix_ts);
+//            System.out.println(d.temperature);
+//        }
+//
+//        LineDataSet set1;
+//
+//        if (line_chart.getData() != null && line_chart.getData().getDataSetCount() > 0) {
+//            set1 = (LineDataSet) line_chart.getData().getDataSetByIndex(0);
+//            set1.setValues(values);
+//            set1.notifyDataSetChanged();
+//            line_chart.getData().notifyDataChanged();
+//            line_chart.notifyDataSetChanged();
+//        } else {
+//            set1 = new LineDataSet(values, "DataSet 1");
+//            set1.setDrawIcons(false);
+//
+//            // draw dashed line
+//            set1.enableDashedLine(10f, 5f, 0f);
+//
+//            // black lines and points
+//            set1.setColor(Color.BLACK);
+//            set1.setCircleColor(Color.BLACK);
+//
+//            // line thickness and point size
+//            set1.setLineWidth(1f);
+//            ;
+//            set1.setCircleRadius(3f);
+//
+//            // draw points as solid circles
+//            set1.setDrawCircleHole(false);
+//
+//            // customize legend entry
+////            set1.setFormLineWidth(1f);
+////            set1.setFormLineDashEffect(new DashPathEffect(new float[]{10f, 5f}, 0f));
+////            set1.setFormSize(15.f);
+//
+//            // text size of values
+//            set1.setValueTextSize(9f);
+//
+//            // draw selection line as dashed
+//            set1.enableDashedHighlightLine(10f, 5f, 0f);
+//
+//            // set the filled area
+//            set1.setDrawFilled(true);
+//            set1.setFillFormatter(new IFillFormatter() {
+//                @Override
+//                public float getFillLinePosition(ILineDataSet dataSet, LineDataProvider dataProvider) {
+//                    return line_chart.getAxisLeft().getAxisMinimum();
+//                }
+//            });
+//
+//            // set color of filled area
+//            set1.setFillColor(Color.BLACK);
+//
+//            ArrayList<ILineDataSet> dataSets = new ArrayList<>();
+//            dataSets.add(set1); // add the data sets
+//
+//            // create a data object with the data sets
+//            LineData data = new LineData(dataSets);
+//
+//            // set data
+//            line_chart.setData(data);
+//        }
+//    }
 
 //    public void plotTemperatureData(LineChart lineChart, ArrayList<LogDataPoint> dataPoints) {
 //        ArrayList<Entry> entries = new ArrayList<>();
