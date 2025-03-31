@@ -238,10 +238,23 @@ public class LineChartActivity extends Activity {
         xAxis.setValueFormatter(new ValueFormatter() { // Convert back to real timestamps for display
             @Override
             public String getFormattedValue(float value) {
-                float x = value + min_time;
-                x *= 1000;
-                Date date_obj = new Date((long) x);
-                String retval = new SimpleDateFormat("yyyy:MM:dd\nHH:mm:ss", Locale.getDefault()).format(date_obj);
+                float ts_value_ms = value + (float) min_time;
+                int ts_secs = ((int) value) + min_time;
+                System.out.println("min_time:" + min_time);
+                System.out.println("value:" + value);
+                System.out.println("ts_secs:" + ts_secs);
+                ts_value_ms *= 1000;
+                System.out.println(ts_value_ms);
+
+                // Extract hour, minute, and second manually
+                long hours = (ts_secs % 86400) / 3600;  // Get hours (mod 86400 to stay within a day)
+                long minutes = (ts_secs % 3600) / 60;   // Get minutes
+                long seconds = ts_secs % 60;           // Get seconds
+
+                Date date_obj = new Date((long) ts_value_ms);
+//                String retval = new SimpleDateFormat("yyyy:MM:dd\nHH:mm:ss", Locale.getDefault()).format(date_obj);
+                String retval = new SimpleDateFormat("yyyy_MM_dd", Locale.getDefault()).format(date_obj);
+                retval += String.format("\n%02d:%02d:%02d", hours, minutes, seconds);
                 System.out.println(value);
                 System.out.println(retval);
                 return retval;
