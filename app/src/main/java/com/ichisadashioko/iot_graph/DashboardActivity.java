@@ -544,7 +544,9 @@ public class DashboardActivity extends Activity {
 
                                             System.out.println(log_message);
                                             Utils.toast(that, log_message);
-
+                                            Utils.LAST_PARSED_DATA = data_point_list;
+                                            Intent intent = new Intent(DashboardActivity.this, LineChartActivity.class);
+                                            startActivity(intent);
                                         }
                                     }
 

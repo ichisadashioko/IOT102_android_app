@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     public BluetoothAdapter bluetoothAdapter;
     public ArrayList<String> deviceList = new ArrayList<>();
     public ArrayList<BluetoothDevice> pairedDevicesList = new ArrayList<>();
+    public Button test_line_chart_button;
 
 
     private void loadPairedDevices() {
@@ -70,18 +71,18 @@ public class MainActivity extends Activity {
         bluetoothListView.setAdapter(adapter);
     }
 
-    public void reload_bluetooth_devices(){
-if(bluetoothAdapter == null){
-    bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-}
+    public void reload_bluetooth_devices() {
+        if (bluetoothAdapter == null) {
+            bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        }
 
-if(bluetoothAdapter == null){
-    Toast.makeText(this, "Bluetooth is not available", Toast.LENGTH_SHORT).show();
-    return;
+        if (bluetoothAdapter == null) {
+            Toast.makeText(this, "Bluetooth is not available", Toast.LENGTH_SHORT).show();
+            return;
 
-}
+        }
 
-loadPairedDevices();
+        loadPairedDevices();
 
 
     }
@@ -92,10 +93,19 @@ loadPairedDevices();
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_main);
 
-
+        test_line_chart_button = findViewById(R.id.button_test_line_chart);
         bluetoothListView = findViewById(R.id.bluetoothListView);
         btnReload = findViewById(R.id.btnReload);
-        reload_bluetooth_devices();
+//        reload_bluetooth_devices();
+
+        Activity that = this;
+        test_line_chart_button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(MainActivity.this, LineChartActivity.class);
+                startActivity(intent);
+            }
+        });
 
         btnReload.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -108,12 +118,11 @@ loadPairedDevices();
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 BluetoothDevice selectedDevice = pairedDevicesList.get(position);
-                    Intent intent = new Intent(MainActivity.this, DashboardActivity.class);
-                    intent.putExtra("DEVICE_ADDRESS", selectedDevice.getAddress());
-                    startActivity(intent);
+                Intent intent = new Intent(MainActivity.this, DashboardActivity.class);
+                intent.putExtra("DEVICE_ADDRESS", selectedDevice.getAddress());
+                startActivity(intent);
             }
         });
-
 
 
 //        line_chart = findViewById(R.id.line_chart);

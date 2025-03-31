@@ -8,6 +8,13 @@
 
 
     <Button
+        android:id="@+id/button_test_line_chart"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="test line chart" />
+
+
+    <Button
         android:id="@+id/btnReload"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
