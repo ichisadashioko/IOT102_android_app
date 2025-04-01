@@ -5,7 +5,6 @@ import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -15,11 +14,9 @@ import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.widget.ToggleButton;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -36,7 +33,7 @@ public class DashboardActivity extends Activity {
     public Button button_set_threshold;
     public Button button_download_data;
     public String deviceAddress;
-    private TextView textView;
+    private TextView text_view_bluetooth_device_info;
     public EditText threshold_input_text;
     private static final UUID HC05_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
@@ -55,7 +52,7 @@ public class DashboardActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    textView.setText("Connecting to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
+                    text_view_bluetooth_device_info.setText("Connecting to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
                 }
             });
 
@@ -83,14 +80,16 @@ public class DashboardActivity extends Activity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            textView.setText("Failed to connect to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
+                            text_view_bluetooth_device_info.setText("Failed to connect to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
+                            text_view_bluetooth_device_info.setTextColor(Color.rgb(255, 0, 0));
                         }
                     });
                 } else {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            textView.setText("Connected to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
+                            text_view_bluetooth_device_info.setText("Connected to: " + bluetoothDevice.getName() + "\n" + bluetoothDevice.getAddress());
+                            text_view_bluetooth_device_info.setTextColor(Color.rgb(0, 255, 0));
                         }
                     });
                     hc05_input_stream = hc05_bluetooth_socket.getInputStream();
@@ -295,11 +294,47 @@ public class DashboardActivity extends Activity {
                                         String log_message = "HC05 retval after toggle force fan on: " + retval;
                                         System.out.println(log_message);
                                         if (retval == 0) {
-                                            if (is_on) {
-                                                toggle_button_force_fan_on.setBackgroundColor(Color.parseColor("#00ff00"));
-                                            } else {
-                                                toggle_button_force_fan_on.setBackgroundColor(Color.parseColor("#ff0000"));
-                                            }
+                                            that.runOnUiThread(new Runnable() {
+                                                @Override
+                                                public void run() {
+                                                    toggle_button_force_fan_on.setOnCheckedChangeListener(null);
+                                                    toggle_button_force_fan_on.setChecked(is_on);
+                                                    toggle_button_force_fan_on.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                                                        @Override
+                                                        public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                                                            toggle_force_fan_on(b);
+                                                        }
+                                                    });
+                                                }
+                                            });
+
+//                                            if (is_on) {
+//                                                that.runOnUiThread(new Runnable() {
+//                                                    @Override
+//                                                    public void run() {
+//                                                        toggle_button_force_fan_on.setBackgroundColor(Color.parseColor("#00ff00"));
+//                                                    }
+//                                                });
+//                                            } else {
+//                                                that.runOnUiThread(new Runnable() {
+//                                                    @Override
+//                                                    public void run() {
+//                                                        toggle_button_force_fan_on.setBackgroundColor(Color.parseColor("#ff0000"));
+//                                                    }
+//                                                });
+//                                            }
+//
+//                                            that.runOnUiThread(new Runnable() {
+//                                                @Override
+//                                                public void run() {
+//                                                    toggle_button_force_fan_on.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+//                                                        @Override
+//                                                        public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+//                                                            toggle_force_fan_on(b);
+//                                                        }
+//                                                    });
+//                                                }
+//                                            });
 
                                             Utils.toast(that, "toggle force fan on OK (" + b_value + ")");
                                         } else {
@@ -343,7 +378,7 @@ public class DashboardActivity extends Activity {
         setContentView(R.layout.dashboard_activity);
         Intent intent = getIntent();
         deviceAddress = intent.getStringExtra("DEVICE_ADDRESS");
-        textView = findViewById(R.id.tv_device_info);
+        text_view_bluetooth_device_info = findViewById(R.id.tv_device_info);
 
         toggle_button_force_fan_on = findViewById(R.id.toggle_button_force_fan_on);
         button_download_data = findViewById(R.id.button_download_data);
@@ -585,6 +620,12 @@ public class DashboardActivity extends Activity {
                                             System.out.println(log_message);
                                             Utils.toast(that, log_message);
                                         } else {
+                                            that.runOnUiThread(new Runnable() {
+                                                @Override
+                                                public void run() {
+                                                    progressDialog.setMessage("parsing data");
+                                                }
+                                            });
                                             byte[] file_content_bs = buffer.toByteArray();
                                             ArrayList<LogDataPoint> data_point_list = new ArrayList<>();
                                             ByteArrayOutputStream current_line_buffer = new ByteArrayOutputStream();
@@ -611,7 +652,7 @@ public class DashboardActivity extends Activity {
                                             }
 
                                             log_message = "data_point_list.size: " + data_point_list.size();
-                                            if(data_point_list.size() > 0){
+                                            if (data_point_list.size() > 0) {
                                                 data_point_list.remove(0);
                                             }
 

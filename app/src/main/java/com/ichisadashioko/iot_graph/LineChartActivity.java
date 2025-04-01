@@ -232,6 +232,8 @@ public class LineChartActivity extends Activity {
         }
 
         LineDataSet lineDataSet = new LineDataSet(lineEntries, "temperature");
+        lineDataSet.setMode(LineDataSet.Mode.CUBIC_BEZIER); // Enable smooth curves
+        lineDataSet.setDrawCircles(false); // Remove circles on data points
 
         LineData lineData = new LineData(lineDataSet);
         line_chart.setData(lineData);
@@ -308,6 +310,8 @@ public class LineChartActivity extends Activity {
         yAxis.setAxisMaximum(max_temp + 5);
 
         yAxis.setGranularity(0.1f);
+        yAxis.setTextColor(Color.rgb(0, 255, 0));
+        xAxis.setTextColor(Color.rgb(0, 255, 0));
 
         line_chart.setScaleEnabled(true);
         line_chart.setPinchZoom(true);

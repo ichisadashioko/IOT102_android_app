@@ -2,33 +2,29 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000"
+    android:layout_margin="20px"
     android:orientation="vertical">
 
     <TextView
         android:id="@+id/tv_device_info"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#000"
-        android:text="sample"
-        android:textColor="#fff" />
+        android:text="sample"/>
 
     <TextView
         android:id="@+id/tv_current_temp_threshold"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#000"
         android:text="CURRENT_TEMPERATURE_THRESHOLD: 10"
-        android:textColor="#fff" />
+        />
 
     <Button
         android:id="@+id/button_get_threshold"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="5px"
-        android:background="#222"
         android:text="GET CURRENT_TEMPERATURE_THRESHOLD"
-        android:textColor="#fff" />
+        />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -39,17 +35,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_margin="10px"
-            android:background="#000"
-            android:text="FORCE_FAN_ON"
-            android:textColor="#fff" />
+            android:text="FORCE_FAN_ON"/>
 
         <ToggleButton
             android:id="@+id/toggle_button_force_fan_on"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_margin="10px"
-            android:background="#f00"
-            android:textColor="#fff" />
+            android:layout_margin="10px"/>
     </LinearLayout>
 
     <LinearLayout
@@ -60,18 +52,14 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="#000"
 
-            android:text="NEW_TEMPERATURE_THRESHOLD:"
-            android:textColor="#fff" />
+            android:text="NEW_TEMPERATURE_THRESHOLD:"/>
 
         <EditText
             android:id="@+id/edit_text_threshold_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_margin="5px"
-            android:background="#222"
-            android:textColor="#fff" />
+            android:layout_margin="5px"/>
 
     </LinearLayout>
 
@@ -80,16 +68,12 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="5px"
-        android:background="#222"
-        android:text="SET CURRENT_TEMPERATURE_THRESHOLD"
-        android:textColor="#fff" />
+        android:text="SET CURRENT_TEMPERATURE_THRESHOLD"/>
 
     <Button
         android:id="@+id/button_download_data"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="5px"
-        android:background="#222"
-        android:text="LOAD_AND_SHOW_DATA"
-        android:textColor="#fff" />
+        android:text="LOAD_AND_SHOW_DATA"/>
 </LinearLayout>
