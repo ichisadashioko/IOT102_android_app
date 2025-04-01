@@ -111,6 +111,73 @@ public class DashboardActivity extends Activity {
     public ReentrantLock HC05_LOCK = new ReentrantLock();
     public ReentrantLock TOGGLE_FORCE_FAN_BUTTON_LOCK = new ReentrantLock();
 
+    public void discard_pending_input_stream_data() {
+        int total_read_count = 0;
+        long last_ui_log_time_ms = System.currentTimeMillis();
+        long ui_log_interval_ms = 1000;
+        while (true) {
+            if ((System.currentTimeMillis() - last_ui_log_time_ms) > ui_log_interval_ms) {
+                last_ui_log_time_ms = System.currentTimeMillis();
+                String ui_log_message = "total_read_count: " + total_read_count;
+                System.out.println(ui_log_message);
+            }
+
+            final boolean[] new_data_ok = {false};
+            final byte[] read_buffer = new byte[32];
+            final Exception[] read_thread_ex = {null};
+            final int[] loop_read_count = {0};
+
+            Thread read_thread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        loop_read_count[0] = hc05_input_stream.read(read_buffer);
+                        synchronized (new_data_ok) {
+                            new_data_ok[0] = true;
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        read_thread_ex[0] = e;
+                    }
+                }
+            });
+            read_thread.start();
+
+            int timeout_ms = 5 * 1000;
+            int check_interval_ms = 100;
+            int wait_loop_count = timeout_ms / check_interval_ms;
+
+            for (int wait_loop_idx = 0; wait_loop_idx < wait_loop_count; wait_loop_idx++) {
+                try {
+                    Thread.sleep(check_interval_ms);
+                    synchronized (new_data_ok) {
+                        if (new_data_ok[0]) {
+                            break;
+                        }
+                    }
+                } catch (InterruptedException interruptedException) {
+                    break;
+                }
+            }
+
+            if (read_thread_ex[0] != null) {
+                // TODO
+                break;
+            }
+
+            if (!new_data_ok[0]) {
+                // TODO connection timeout
+                break;
+            }
+
+            if (loop_read_count[0] < 1) {
+                break;
+            }
+
+            total_read_count += loop_read_count[0];
+        }
+    }
+
     public void toggle_force_fan_on(boolean is_on) {
         if (background_task_running) {
             // TODO
@@ -152,6 +219,7 @@ public class DashboardActivity extends Activity {
                                 Utils.toast(that, "hc05_output_stream is null");
                             } else {
                                 try {
+//                                    discard_pending_input_stream_data();
                                     byte b_value;
                                     if (is_on) {
                                         b_value = Utils.BT_CMD_CODE_ENABLE_FAN;
@@ -387,6 +455,8 @@ public class DashboardActivity extends Activity {
                         HC05_LOCK.lock();
                         try {
                             try {
+//                                discard_pending_input_stream_data();
+
                                 hc05_output_stream.write(new byte[]{Utils.BT_CMD_CODE_DOWNLOAD_DATA});
                                 hc05_output_stream.flush();
                                 int status_code = hc05_input_stream.read();
@@ -541,6 +611,9 @@ public class DashboardActivity extends Activity {
                                             }
 
                                             log_message = "data_point_list.size: " + data_point_list.size();
+                                            if(data_point_list.size() > 0){
+                                                data_point_list.remove(0);
+                                            }
 
                                             System.out.println(log_message);
                                             Utils.toast(that, log_message);
@@ -650,6 +723,8 @@ public class DashboardActivity extends Activity {
                         try {
                             String input_str = threshold_input_text.getText().toString();
                             try {
+//                                discard_pending_input_stream_data();
+
                                 float input_value = Float.parseFloat(input_str);
                                 // Allocate a ByteBuffer with 4 bytes
                                 ByteBuffer buffer = ByteBuffer.allocate(4);

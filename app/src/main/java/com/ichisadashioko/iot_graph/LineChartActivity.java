@@ -45,6 +45,7 @@ public class LineChartActivity extends Activity {
         button_plot_random_data = findViewById(R.id.button_plot_random_data);
 
 //        setupChart();
+        stackoverflow_draw_line_chart_proper_time_x_axis();
 
         Activity that = this;
         button_plot_random_data.setOnClickListener(new View.OnClickListener() {
@@ -203,6 +204,18 @@ public class LineChartActivity extends Activity {
     }
 
     private void stackoverflow_draw_line_chart_proper_time_x_axis() {
+        if (Utils.LAST_PARSED_DATA == null) {
+            Utils.toast(this, "Utils.LAST_PARSED_DATA == null");
+            return;
+        }
+
+        if (Utils.LAST_PARSED_DATA.size() == 0) {
+            Utils.toast(this, "Utils.LAST_PARSED_DATA.size() == 0");
+            return;
+        }
+
+        float min_temp = Utils.LAST_PARSED_DATA.get(0).temperature;
+        float max_temp = min_temp;
         ArrayList<Entry> lineEntries = new ArrayList<Entry>();
         int min_time = Utils.LAST_PARSED_DATA.get(0).unix_ts;
         int max_time = Utils.LAST_PARSED_DATA.get(Utils.LAST_PARSED_DATA.size() - 1).unix_ts;
@@ -214,6 +227,8 @@ public class LineChartActivity extends Activity {
 //            lineEntries.add(new Entry(i, d.temperature));
             System.out.println(d.unix_ts);
             System.out.println(d.temperature);
+            min_temp = Math.min(min_temp, d.temperature);
+            max_temp = Math.max(max_temp, d.temperature);
         }
 
         LineDataSet lineDataSet = new LineDataSet(lineEntries, "temperature");
@@ -287,11 +302,17 @@ public class LineChartActivity extends Activity {
         lineDataSet.setAxisDependency(YAxis.AxisDependency.LEFT);
 
         YAxis yAxis = line_chart.getAxisLeft();
-        yAxis.setAxisMinimum(10);
-        yAxis.setAxisMaximum(50);
+//        yAxis.setAxisMinimum(10);
+//        yAxis.setAxisMaximum(50);
+        yAxis.setAxisMinimum(min_temp - 5);
+        yAxis.setAxisMaximum(max_temp + 5);
+
         yAxis.setGranularity(0.1f);
 
-
+        line_chart.setScaleEnabled(true);
+        line_chart.setPinchZoom(true);
+        line_chart.getViewPortHandler().setMaximumScaleX(2f);
+        line_chart.getViewPortHandler().setMaximumScaleY(100f);
         line_chart.invalidate();
     }
 
