@@ -19,6 +19,7 @@ import android.widget.ToggleButton;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -28,10 +29,12 @@ import java.util.concurrent.locks.ReentrantLock;
 public class DashboardActivity extends Activity {
 
     private BluetoothAdapter bluetoothAdapter;
+    public TextView tv_current_tmp;
     private BluetoothDevice bluetoothDevice;
     public ToggleButton toggle_button_force_fan_on;
     public Button button_set_threshold;
     public Button button_download_data;
+    public Button button_get_current_temp;
     public String deviceAddress;
     private TextView text_view_bluetooth_device_info;
     public EditText threshold_input_text;
@@ -179,6 +182,7 @@ public class DashboardActivity extends Activity {
 
     public void toggle_force_fan_on(boolean is_on) {
         if (background_task_running) {
+            Utils.toast(this, "another task is running!");
             // TODO
             return;
         }
@@ -371,6 +375,185 @@ public class DashboardActivity extends Activity {
 
     public ReentrantLock UI_LOCK = new ReentrantLock();
 
+    public void get_current_temp_button_click() {
+        if (background_task_running) {
+            Utils.toast(this, "another task is running!");
+            // TODO
+            return;
+        }
+
+        if (!UI_LOCK.tryLock()) {
+            return;
+        }
+
+        background_task_running = true;
+        UI_LOCK.unlock();
+
+        ProgressDialog progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage("working");
+        progressDialog.setCancelable(false); // Prevent user from dismissing
+        progressDialog.show();
+
+        Activity that = this;
+
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    HC05_LOCK.lock();
+                    try {
+                        if (hc05_output_stream == null) {
+                            reconnect_bluetooth_device();
+                        }
+                    } finally {
+                        HC05_LOCK.unlock();
+                    }
+                    if (hc05_output_stream == null) {
+                        Utils.toast(that, "hc05_output_stream is null");
+                    } else {
+                        HC05_LOCK.lock();
+                        try {
+                            try {
+//                                discard_pending_input_stream_data();
+
+                                hc05_output_stream.write(new byte[]{Utils.BT_CMD_CODE_GET_TEMPERATURE});
+                                hc05_output_stream.flush();
+
+
+                                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                                int total_read_count = 0;
+                                long last_ui_log_time_ms = System.currentTimeMillis();
+                                long ui_log_interval_ms = 1000;
+                                while (true) {
+                                    if (total_read_count >= 4) {
+                                        break;
+                                    }
+
+                                    final boolean[] new_data_ok = {false};
+                                    final byte[] read_buffer = new byte[4];
+                                    final Exception[] read_thread_ex = {null};
+                                    final int[] loop_read_count = {0};
+
+                                    Thread read_thread = new Thread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            try {
+                                                loop_read_count[0] = hc05_input_stream.read(read_buffer);
+                                                synchronized (new_data_ok) {
+                                                    new_data_ok[0] = true;
+                                                }
+                                            } catch (Exception e) {
+                                                e.printStackTrace();
+                                                read_thread_ex[0] = e;
+                                            }
+                                        }
+                                    });
+                                    read_thread.start();
+
+                                    int timeout_ms = bluetooth_timeout_secs * 1000;
+                                    int check_interval_ms = 100;
+                                    int wait_loop_count = timeout_ms / check_interval_ms;
+
+                                    for (int wait_loop_idx = 0; wait_loop_idx < wait_loop_count; wait_loop_idx++) {
+                                        try {
+                                            Thread.sleep(check_interval_ms);
+                                            synchronized (new_data_ok) {
+                                                if (new_data_ok[0]) {
+                                                    break;
+                                                }
+                                            }
+                                        } catch (InterruptedException interruptedException) {
+                                            break;
+                                        }
+                                    }
+
+                                    if (read_thread_ex[0] != null) {
+                                        // TODO
+                                        break;
+                                    }
+
+                                    if (!new_data_ok[0]) {
+                                        // TODO connection timeout
+                                        break;
+                                    }
+
+                                    if (loop_read_count[0] < 1) {
+                                        break;
+                                    }
+
+                                    total_read_count += loop_read_count[0];
+                                    buffer.write(read_buffer, 0, loop_read_count[0]);
+                                }
+
+                                String log_message = "total_read_count: " + total_read_count;
+                                System.out.println(log_message);
+                                Utils.toast(that, log_message);
+
+
+                                if (total_read_count < 1) {
+                                    log_message = "empty data";
+
+                                    System.out.println(log_message);
+                                    Utils.toast(that, log_message);
+                                } else {
+                                    that.runOnUiThread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            progressDialog.setMessage("parsing data");
+                                        }
+                                    });
+                                    byte[] file_content_bs = buffer.toByteArray();
+                                    if (file_content_bs.length < 4) {
+                                        log_message = "failed to read current temperature data file_content_bs.length = " + file_content_bs.length;
+                                        System.out.println(log_message);
+                                        Utils.toast(that, log_message);
+                                    } else {
+                                        ByteBuffer float_buffer = ByteBuffer.wrap(new byte[]{file_content_bs[0], file_content_bs[1], file_content_bs[2], file_content_bs[3]});
+                                        float current_temp = float_buffer.order(ByteOrder.LITTLE_ENDIAN).getFloat();
+                                        log_message = "current_temp: " + current_temp;
+                                        System.out.println(log_message);
+                                        Utils.toast(that, log_message);
+                                        that.runOnUiThread(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                tv_current_tmp.setText(current_temp+" *C");
+                                            }
+                                        });
+                                    }
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                Utils.toast(that, e.getMessage());
+                            }
+
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            Utils.toast(that, e.getMessage());
+                        } finally {
+                            HC05_LOCK.unlock();
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println(ex.getMessage());
+                    System.err.println(ex.toString());
+                } finally {
+                    that.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            progressDialog.dismiss();
+                        }
+                    });
+                    background_task_running = false;
+                }
+
+            }
+        };
+        Thread t = new Thread(task);
+        t.start();
+        //
+
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -379,16 +562,25 @@ public class DashboardActivity extends Activity {
         Intent intent = getIntent();
         deviceAddress = intent.getStringExtra("DEVICE_ADDRESS");
         text_view_bluetooth_device_info = findViewById(R.id.tv_device_info);
+        button_get_current_temp = findViewById(R.id.button_get_current_temp);
 
         toggle_button_force_fan_on = findViewById(R.id.toggle_button_force_fan_on);
         button_download_data = findViewById(R.id.button_download_data);
         button_set_threshold = findViewById(R.id.button_set_threshold);
         threshold_input_text = findViewById(R.id.edit_text_threshold_input);
+        tv_current_tmp = findViewById(R.id.tv_current_temp);
 
         toggle_button_force_fan_on.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
                 toggle_force_fan_on(b);
+            }
+        });
+
+        button_get_current_temp.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                get_current_temp_button_click();
             }
         });
 
@@ -453,6 +645,7 @@ public class DashboardActivity extends Activity {
 
     public void button_download_data_clicked() {
         if (background_task_running) {
+            Utils.toast(this, "another task is running!");
             // TODO
             return;
         }
@@ -727,6 +920,7 @@ public class DashboardActivity extends Activity {
 
     public void button_set_threshold_clicked() {
         if (background_task_running) {
+            Utils.toast(this, "another task is running!");
             // TODO
             return;
         }

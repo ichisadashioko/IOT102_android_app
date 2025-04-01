@@ -11,6 +11,31 @@
         android:layout_height="wrap_content"
         android:text="sample"/>
 
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CURRENT_TEMPERATURE: "/>
+
+        <TextView
+            android:id="@+id/tv_current_temp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="0"/>
+
+    </LinearLayout>
+    <Button
+        android:id="@+id/button_get_current_temp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="5px"
+        android:text="GET CURRENT_TEMPERATURE"
+        />
+
     <TextView
         android:id="@+id/tv_current_temp_threshold"
         android:layout_width="match_parent"

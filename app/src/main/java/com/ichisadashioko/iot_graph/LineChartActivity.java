@@ -214,6 +214,12 @@ public class LineChartActivity extends Activity {
             return;
         }
 
+        // create group
+        ArrayList<LogDataPoint> current_group = new ArrayList<>();
+        ArrayList<ArrayList<LogDataPoint>> all_group_list = new ArrayList<>();
+        all_group_list.add(current_group);
+//        boolean
+
         float min_temp = Utils.LAST_PARSED_DATA.get(0).temperature;
         float max_temp = min_temp;
         ArrayList<Entry> lineEntries = new ArrayList<Entry>();

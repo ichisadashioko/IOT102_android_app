@@ -11,6 +11,7 @@ public class Utils {
     public static byte BT_CMD_CODE_ENABLE_FAN = 2;
     public static byte BT_CMD_CODE_DISABLE_FAN = 3;
     public static byte BT_CMD_CODE_DOWNLOAD_DATA = 4;
+    public static byte BT_CMD_CODE_GET_TEMPERATURE = 5;
 
     public static ArrayList<LogDataPoint> LAST_PARSED_DATA = null;
 
